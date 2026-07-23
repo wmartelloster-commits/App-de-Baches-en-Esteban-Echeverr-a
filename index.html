@@ -336,17 +336,22 @@
     return { lat, lng, aproximado: true };
   }
 
-  async function buscarEnNominatim(params){
+  async function buscarEnNominatim(params, etiqueta){
     try{
       const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&' + params;
       const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-      if(!res.ok) return null;
+      if(!res.ok){
+        console.warn('[ubicación] "' + etiqueta + '" respondió con error HTTP ' + res.status);
+        return null;
+      }
       const data = await res.json();
       if(data && data[0]){
+        console.info('[ubicación] "' + etiqueta + '" encontró: ' + data[0].display_name);
         return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
       }
+      console.info('[ubicación] "' + etiqueta + '" no encontró resultados (0 coincidencias).');
     }catch(err){
-      console.warn('Fallo la consulta a Nominatim:', err);
+      console.warn('[ubicación] "' + etiqueta + '" falló por un problema de red:', err);
     }
     return null;
   }
@@ -356,23 +361,38 @@
       return ubicacionAproximada(calle, barrio, localidad);
     }
 
-    // 1) Búsqueda ESTRUCTURADA (mucho más precisa que el texto libre):
-    // separa calle, ciudad y provincia en vez de mezclar todo en una frase.
+    // 1) Búsqueda ESTRUCTURADA con calle + altura completas
     const paramsEstructurados = 'street=' + encodeURIComponent(calle) +
       '&city=' + encodeURIComponent(localidad) +
       '&state=' + encodeURIComponent('Buenos Aires') +
       '&country=' + encodeURIComponent('Argentina') +
       '&countrycodes=ar';
-    let resultado = await buscarEnNominatim(paramsEstructurados);
+    let resultado = await buscarEnNominatim(paramsEstructurados, 'estructurada: ' + calle + ', ' + localidad);
     if(resultado) return { ...resultado, aproximado: false };
 
-    // 2) Si no encontró nada, texto libre simple (sin barrio ni "Partido de..."
-    // que no son nombres oficiales y pueden confundir la búsqueda)
+    // 2) Texto libre simple (sin barrio ni "Partido de..." que pueden confundir)
     const consultaSimple = [calle, localidad, 'Buenos Aires', 'Argentina'].filter(Boolean).join(', ');
-    resultado = await buscarEnNominatim('countrycodes=ar&q=' + encodeURIComponent(consultaSimple));
+    resultado = await buscarEnNominatim('countrycodes=ar&q=' + encodeURIComponent(consultaSimple), 'texto libre: ' + consultaSimple);
     if(resultado) return { ...resultado, aproximado: false };
 
-    // 3) Respaldo aproximado si ninguna búsqueda encontró la dirección
+    // 3) Solo el nombre de la calle, SIN el número de altura. En Argentina,
+    // fuera de las grandes ciudades, OpenStreetMap suele tener el trazado
+    // de la calle cargado pero no la numeración exacta de cada puerta.
+    // Esto al menos ubica el bache sobre la calle correcta, aunque no en
+    // la altura exacta.
+    const soloNombreCalle = calle.replace(/\d+/g, '').trim();
+    if(soloNombreCalle && soloNombreCalle !== calle){
+      const paramsSoloCalle = 'street=' + encodeURIComponent(soloNombreCalle) +
+        '&city=' + encodeURIComponent(localidad) +
+        '&state=' + encodeURIComponent('Buenos Aires') +
+        '&country=' + encodeURIComponent('Argentina') +
+        '&countrycodes=ar';
+      resultado = await buscarEnNominatim(paramsSoloCalle, 'solo calle (sin altura): ' + soloNombreCalle + ', ' + localidad);
+      if(resultado) return { ...resultado, aproximado: false, calleSinAltura: true };
+    }
+
+    // 4) Respaldo aproximado si ninguna búsqueda encontró la dirección
+    console.info('[ubicación] Ninguna búsqueda encontró la dirección. Se usa el respaldo aproximado.');
     return ubicacionAproximada(calle, barrio, localidad);
   }
 
@@ -480,6 +500,7 @@
           Barrio ${escapeHtml(r.barrio)}${r.calle ? '<br>' + escapeHtml(r.calle) : ''}
           ${r.descripcion ? '<br>' + escapeHtml(r.descripcion) : ''}
           ${r.aproximado ? '<div style="color:#D4A537;font-size:11px;margin-top:5px;">📍 Ubicación aproximada</div>' : ''}
+          ${r.calleSinAltura ? '<div style="color:#17AEC2;font-size:11px;margin-top:5px;">📍 Ubicado sobre la calle (altura aproximada)</div>' : ''}
           ${photoHtml}
         </div>
       `);
@@ -541,6 +562,7 @@
       lat: ubicacion.lat,
       lng: ubicacion.lng,
       aproximado: ubicacion.aproximado,
+      calleSinAltura: !!ubicacion.calleSinAltura,
       localidad,
       barrio,
       calle,
