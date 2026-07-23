@@ -304,9 +304,25 @@
 <p class="footer-note">Los reportes cargados acá son visibles para todas las personas que usan esta herramienta. No incluyas datos personales sensibles en la descripción o la foto.</p>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, addDoc, onSnapshot, query, orderBy
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCNu18oqXvebJDL5_-YBMbD_RjXtEI4Ld0",
+  authDomain: "baches-esteban-echeverria.firebaseapp.com",
+  projectId: "baches-esteban-echeverria",
+  storageBucket: "baches-esteban-echeverria.firebasestorage.app",
+  messagingSenderId: "115389915694",
+  appId: "1:115389915694:web:eefd6d360f46fceaa3b5bf"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp);
+const reportesCol = collection(db, 'reportes');
+
 (function(){
-  const STORAGE_KEY = 'baches-reportes';
   const CENTER = [-34.8175, -58.4794]; // Monte Grande
   let reportes = [];
 
@@ -507,35 +523,16 @@
     });
   }
 
-  let storageDisponible = true;
-
-  async function loadReportes(){
-    try{
-      if(!window.storage) throw new Error('window.storage no disponible');
-      const res = await window.storage.get(STORAGE_KEY, true);
-      reportes = res && res.value ? JSON.parse(res.value) : [];
-    }catch(err){
-      console.warn('No se pudo leer el almacenamiento persistente, se usa memoria de la sesión:', err);
-      storageDisponible = false;
-      reportes = reportes || [];
-      document.getElementById('list-hint').textContent = 'Modo sesión (no persiste al recargar)';
-    }
+  // Escucha en tiempo real: cuando cualquier vecino carga un bache,
+  // se actualiza automáticamente para todos los que tengan la página abierta.
+  onSnapshot(query(reportesCol, orderBy('fecha', 'desc')), (snapshot) => {
+    reportes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     renderList();
     renderMarkers();
-  }
-
-  async function saveReportes(){
-    if(!storageDisponible){
-      return; // se guarda solo en memoria, no hay backend disponible en esta vista
-    }
-    try{
-      await window.storage.set(STORAGE_KEY, JSON.stringify(reportes), true);
-    }catch(err){
-      console.warn('No se pudo guardar en almacenamiento persistente, se sigue en memoria:', err);
-      storageDisponible = false;
-      document.getElementById('list-hint').textContent = 'Modo sesión (no persiste al recargar)';
-    }
-  }
+  }, (err) => {
+    console.error('No se pudo conectar con la base de datos:', err);
+    document.getElementById('list-hint').textContent = 'No se pudo conectar. Recargá la página.';
+  });
 
   document.getElementById('form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -558,7 +555,6 @@
     const ubicacion = await ubicarDireccion(calle, barrio, localidad);
 
     const nuevo = {
-      id: 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
       lat: ubicacion.lat,
       lng: ubicacion.lng,
       aproximado: ubicacion.aproximado,
@@ -572,14 +568,10 @@
     };
 
     try{
-      reportes.push(nuevo);
-      await saveReportes();
-      renderList();
-      renderMarkers();
+      btn.textContent = 'Guardando…';
+      await addDoc(reportesCol, nuevo);
+      // onSnapshot se encarga de refrescar la lista y el mapa automáticamente
       map.setView([nuevo.lat, nuevo.lng], 16, {animate:true});
-      markerLayer.eachLayer(m => {
-        if(m.getLatLng().lat === nuevo.lat && m.getLatLng().lng === nuevo.lng){ m.openPopup(); }
-      });
 
       msg.className = 'msg ok';
       msg.textContent = ubicacion.aproximado
@@ -591,16 +583,13 @@
       photoDataUrl = null;
     }catch(err){
       console.error(err);
-      reportes.pop();
       msg.className = 'msg err';
-      msg.textContent = 'No se pudo guardar. Intentá de nuevo.';
+      msg.textContent = 'No se pudo guardar. Revisá tu conexión e intentá de nuevo.';
     }finally{
       btn.disabled = false;
       btn.textContent = 'Reportar bache';
     }
   });
-
-  loadReportes();
 })();
 </script>
 </body>
