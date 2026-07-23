@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esteban Echeverría · Cargá el bache de tu barrio</title>
+<meta name="description" content="Reportá baches en las calles del Partido de Esteban Echeverría: localidad, barrio, calle y foto. Un mapa colaborativo entre vecinos.">
+<meta property="og:title" content="Esteban Echeverría · Cargá el bache de tu barrio">
+<meta property="og:description" content="Marcá en el mapa el bache de tu calle: localidad, barrio y foto. Entre todos armamos el relevamiento del partido.">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Esteban Echeverría · Cargá el bache de tu barrio">
+<meta name="twitter:description" content="Marcá en el mapa el bache de tu calle: localidad, barrio y foto.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<style>
+  :root{
+    --navy:#0B1F3A;
+    --navy-2:#122A4D;
+    --cyan:#17AEC2;
+    --gold:#D4A537;
+    --paper:#F5F7FA;
+    --ink:#101826;
+    --slate:#5B6B80;
+    --line:#DDE3EA;
+    --danger:#C4432B;
+    --ok:#2E8B57;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  header.top{
+    background:linear-gradient(135deg,var(--navy) 0%,var(--navy-2) 100%);
+    color:#fff;
+    padding:22px 28px 18px;
+  }
+  .top-inner{
+    max-width:1200px;
+    margin:0 auto;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  h1{
+    font-family:'Arial Black', Arial, sans-serif;
+    font-weight:900;
+    font-size:clamp(20px,3vw,30px);
+    margin:0;
+    letter-spacing:0.3px;
+  }
+  .eyebrow{
+    text-transform:uppercase;
+    font-size:11px;
+    letter-spacing:2px;
+    color:var(--cyan);
+    font-weight:700;
+    margin:0 0 4px;
+  }
+  .subtitle{
+    margin:6px 0 0;
+    font-size:13.5px;
+    color:#C7D2E0;
+    max-width:520px;
+  }
+  .stat-pill{
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.18);
+    border-radius:10px;
+    padding:10px 16px;
+    text-align:center;
+    min-width:96px;
+  }
+  .stat-pill .n{font-family:'Arial Black',Arial,sans-serif;font-size:22px;color:var(--gold);line-height:1;}
+  .stat-pill .l{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:#C7D2E0;margin-top:4px;}
+  .rainbow{
+    height:5px;
+    background:linear-gradient(90deg,#D4A537,#C4432B,#17AEC2,#2E8B57,#0B1F3A);
+  }
+  main{
+    max-width:1200px;
+    margin:0 auto;
+    padding:24px 20px 60px;
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:20px;
+  }
+  @media (max-width:880px){ main{grid-template-columns:1fr;} }
+
+  .panel{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:14px;
+    overflow:hidden;
+  }
+  .panel-head{
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .panel-head h2{
+    margin:0;
+    font-size:15px;
+    font-weight:800;
+    color:var(--navy);
+  }
+  .hint{font-size:12px;color:var(--slate);}
+  #map{ height:460px; width:100%; }
+  @media (max-width:880px){ #map{height:340px;} }
+
+  form{ padding:16px 18px 18px; }
+  label{
+    display:block;
+    font-size:12px;
+    font-weight:700;
+    color:var(--navy);
+    margin:12px 0 5px;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+  }
+  label:first-of-type{margin-top:0;}
+  select, input[type=text], textarea{
+    width:100%;
+    padding:9px 10px;
+    border:1.5px solid var(--line);
+    border-radius:8px;
+    font-size:14px;
+    font-family:inherit;
+    color:var(--ink);
+    background:#fff;
+  }
+  select:focus, input:focus, textarea:focus{
+    outline:2px solid var(--cyan);
+    outline-offset:1px;
+    border-color:var(--cyan);
+  }
+  textarea{resize:vertical; min-height:64px;}
+  .coord-box{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    background:var(--paper);
+    border:1.5px dashed var(--line);
+    border-radius:8px;
+    padding:9px 10px;
+    font-size:13px;
+    color:var(--slate);
+  }
+  .coord-box.set{ border-color:var(--cyan); color:var(--navy); font-weight:600; }
+  .photo-row{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .photo-preview{
+    width:56px;height:56px;border-radius:8px;
+    object-fit:cover;border:1.5px solid var(--line);
+    display:none;
+  }
+  input[type=file]{
+    font-size:12.5px;
+  }
+  button.submit{
+    margin-top:16px;
+    width:100%;
+    background:var(--navy);
+    color:#fff;
+    border:none;
+    border-radius:9px;
+    padding:12px;
+    font-weight:800;
+    font-size:14px;
+    letter-spacing:0.3px;
+    cursor:pointer;
+    transition:background .15s ease;
+  }
+  button.submit:hover{ background:var(--navy-2); }
+  button.submit:disabled{ background:#9AA7B8; cursor:not-allowed; }
+  .msg{
+    margin-top:10px;
+    font-size:12.5px;
+    padding:8px 10px;
+    border-radius:7px;
+    display:none;
+  }
+  .msg.ok{ display:block; background:#E7F5EC; color:var(--ok); }
+  .msg.err{ display:block; background:#FBEAE6; color:var(--danger); }
+
+  .list-wrap{ padding:6px 0 4px; max-height:520px; overflow-y:auto; }
+  .item{
+    display:flex;
+    gap:12px;
+    padding:12px 18px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    transition:background .12s ease;
+  }
+  .item:hover{ background:#F9FAFC; }
+  .item img{
+    width:56px;height:56px;border-radius:8px;object-fit:cover;
+    background:var(--paper); border:1px solid var(--line); flex-shrink:0;
+  }
+  .item .no-photo{
+    width:56px;height:56px;border-radius:8px;background:var(--paper);
+    border:1px solid var(--line); flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:20px;color:var(--slate);
+  }
+  .item .info{ flex:1; min-width:0; }
+  .item .loc{ font-weight:800; font-size:13.5px; color:var(--navy); }
+  .item .barrio{ font-size:12.5px; color:var(--slate); margin-top:1px;}
+  .item .desc{ font-size:12px; color:var(--ink); margin-top:4px; line-height:1.35;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .item .date{ font-size:10.5px; color:#9AA7B8; margin-top:5px; text-transform:uppercase; letter-spacing:0.4px; }
+  .empty{ padding:40px 20px; text-align:center; color:var(--slate); font-size:13.5px; }
+  .empty b{ display:block; color:var(--navy); font-size:14.5px; margin-bottom:4px; }
+
+  .footer-note{
+    max-width:1200px; margin:0 auto; padding:0 20px 30px;
+    font-size:11.5px; color:var(--slate); text-align:center;
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div>
+      <p class="eyebrow">Partido de Esteban Echeverría</p>
+      <h1>Mapa Interactivo de Baches</h1>
+      <p class="subtitle">Marcá en el mapa dónde está el bache y contanos localidad, barrio y una foto si podés. Entre todos armamos el relevamiento.</p>
+    </div>
+    <div class="stat-pill">
+      <div class="n" id="stat-count">0</div>
+      <div class="l">Reportados</div>
+    </div>
+  </div>
+</header>
+<div class="rainbow"></div>
+
+<main>
+  <section class="panel">
+    <div class="panel-head">
+      <h2>📍 Baches reportados</h2>
+      <span class="hint" id="map-hint">Se ubican solos con la dirección que cargues</span>
+    </div>
+    <div id="map"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Cargar un bache</h2>
+    </div>
+    <form id="form">
+      <label for="localidad">Localidad</label>
+      <select id="localidad" required>
+        <option value="" disabled selected>Elegí una localidad</option>
+        <option>Monte Grande</option>
+        <option>Luis Guillón</option>
+        <option>Canning</option>
+        <option>El Jagüel</option>
+        <option>9 de Abril</option>
+      </select>
+
+      <label for="barrio">Barrio</label>
+      <input type="text" id="barrio" placeholder="Ej: Barrio Uno, Santa Rosa, El Trébol..." required>
+
+      <label for="calle">Calle y altura (opcional)</label>
+      <input type="text" id="calle" placeholder="Ej: Av. Espora al 1200">
+
+      <label for="descripcion">Descripción (opcional)</label>
+      <textarea id="descripcion" placeholder="Tamaño aproximado, si afecta el tránsito, etc."></textarea>
+
+      <label for="foto">Foto (opcional)</label>
+      <div class="photo-row">
+        <input type="file" id="foto" accept="image/*">
+        <img id="foto-preview" class="photo-preview" alt="Vista previa">
+      </div>
+
+      <button type="submit" class="submit" id="submit-btn">Reportar bache</button>
+      <div class="msg" id="form-msg"></div>
+    </form>
+  </section>
+</main>
+
+<main style="margin-top:-8px;">
+  <section class="panel" style="grid-column:1 / -1;">
+    <div class="panel-head">
+      <h2>Baches reportados por vecinos</h2>
+      <span class="hint" id="list-hint">Cargando…</span>
+    </div>
+    <div class="list-wrap" id="list-wrap">
+      <div class="empty"><b>Todavía no hay reportes</b>Sé el primero en marcar un bache en el mapa.</div>
+    </div>
+  </section>
+</main>
+
+<p class="footer-note">Los reportes cargados acá son visibles para todas las personas que usan esta herramienta. No incluyas datos personales sensibles en la descripción o la foto.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+  const STORAGE_KEY = 'baches-reportes';
+  const CENTER = [-34.8175, -58.4794]; // Monte Grande
+  let reportes = [];
+
+  // Centro aproximado de cada localidad, usado como referencia si la
+  // dirección exacta no se puede ubicar automáticamente.
+  const LOCALIDAD_CENTROS = {
+    'Monte Grande': [-34.8175, -58.4794],
+    'Luis Guillón': [-34.8032, -58.4470],
+    'Canning': [-34.8425, -58.5136],
+    'El Jagüel': [-34.8267, -58.5044],
+    '9 de Abril': [-34.8517, -58.4658]
+  };
+
+  function jitter(coord){
+    // pequeño desplazamiento aleatorio para que reportes aproximados
+    // en una misma localidad no queden todos apilados en el mismo punto
+    const delta = () => (Math.random() - 0.5) * 0.006;
+    return [coord[0] + delta(), coord[1] + delta()];
+  }
+
+  function jitter(coord, seedStr){
+    // desplazamiento pseudo-aleatorio pero determinístico según barrio+calle,
+    // para que el mismo barrio/calle siempre caiga cerca del mismo punto
+    // y no todos los reportes de una localidad queden apilados en un solo lugar
+    let hash = 0;
+    for(let i=0;i<seedStr.length;i++){ hash = (hash*31 + seedStr.charCodeAt(i)) | 0; }
+    const rnd1 = Math.abs(Math.sin(hash)) - 0.5;
+    const rnd2 = Math.abs(Math.cos(hash)) - 0.5;
+    return [coord[0] + rnd1*0.012, coord[1] + rnd2*0.012];
+  }
+
+  function ubicarDireccion(calle, barrio, localidad){
+    const centro = LOCALIDAD_CENTROS[localidad] || CENTER;
+    const [lat, lng] = jitter(centro, (localidad||'') + '|' + (barrio||'') + '|' + (calle||''));
+    return { lat, lng, aproximado: true };
+  }
+
+  const map = L.map('map').setView(CENTER, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const bacheIcon = L.divIcon({
+    className: '',
+    html: '<div style="background:#C4432B;width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);"></div>',
+    iconSize: [16,16],
+    iconAnchor: [8,16]
+  });
+  let markerLayer = L.layerGroup().addTo(map);
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  // --- Photo handling: resize/compress before storing ---
+  function resizeImage(file, maxDim, quality){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width, h = img.height;
+          if(w > h && w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+          else if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = ev.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  let photoDataUrl = null;
+  document.getElementById('foto').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if(!file) { photoDataUrl = null; document.getElementById('foto-preview').style.display='none'; return; }
+    try{
+      photoDataUrl = await resizeImage(file, 700, 0.55);
+      const prev = document.getElementById('foto-preview');
+      prev.src = photoDataUrl;
+      prev.style.display = 'block';
+    }catch(err){
+      console.error('Error procesando foto', err);
+      photoDataUrl = null;
+    }
+  });
+
+  function fmtDate(iso){
+    try{
+      return new Date(iso).toLocaleDateString('es-AR', {day:'2-digit', month:'short', year:'numeric'});
+    }catch(e){ return ''; }
+  }
+
+  function renderList(){
+    const wrap = document.getElementById('list-wrap');
+    document.getElementById('stat-count').textContent = reportes.length;
+    document.getElementById('list-hint').textContent = reportes.length + ' en total';
+    if(reportes.length === 0){
+      wrap.innerHTML = '<div class="empty"><b>Todavía no hay reportes</b>Sé el primero en marcar un bache en el mapa.</div>';
+      return;
+    }
+    const sorted = [...reportes].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+    wrap.innerHTML = sorted.map(r => `
+      <div class="item" data-lat="${r.lat}" data-lng="${r.lng}">
+        ${r.foto ? `<img src="${r.foto}" alt="Foto del bache">` : `<div class="no-photo">🕳️</div>`}
+        <div class="info">
+          <div class="loc">${escapeHtml(r.localidad)}${r.calle ? ' · ' + escapeHtml(r.calle) : ''}</div>
+          <div class="barrio">Barrio ${escapeHtml(r.barrio)}</div>
+          ${r.descripcion ? `<div class="desc">${escapeHtml(r.descripcion)}</div>` : ''}
+          <div class="date">${fmtDate(r.fecha)}</div>
+        </div>
+      </div>
+    `).join('');
+
+    wrap.querySelectorAll('.item').forEach(el => {
+      el.addEventListener('click', () => {
+        const lat = parseFloat(el.dataset.lat), lng = parseFloat(el.dataset.lng);
+        map.setView([lat,lng], 16, {animate:true});
+      });
+    });
+  }
+
+  function renderMarkers(){
+    markerLayer.clearLayers();
+    reportes.forEach(r => {
+      const m = L.marker([r.lat, r.lng], {icon: bacheIcon}).addTo(markerLayer);
+      const photoHtml = r.foto ? `<img src="${r.foto}" style="width:100%;max-width:200px;border-radius:6px;margin-top:6px;">` : '';
+      m.bindPopup(`
+        <div style="font-family:sans-serif;font-size:13px;max-width:210px;">
+          <b>${escapeHtml(r.localidad)}</b><br>
+          Barrio ${escapeHtml(r.barrio)}${r.calle ? '<br>' + escapeHtml(r.calle) : ''}
+          ${r.descripcion ? '<br>' + escapeHtml(r.descripcion) : ''}
+          ${r.aproximado ? '<div style="color:#D4A537;font-size:11px;margin-top:5px;">📍 Ubicación aproximada</div>' : ''}
+          ${photoHtml}
+        </div>
+      `);
+    });
+  }
+
+  let storageDisponible = true;
+
+  async function loadReportes(){
+    try{
+      if(!window.storage) throw new Error('window.storage no disponible');
+      const res = await window.storage.get(STORAGE_KEY, true);
+      reportes = res && res.value ? JSON.parse(res.value) : [];
+    }catch(err){
+      console.warn('No se pudo leer el almacenamiento persistente, se usa memoria de la sesión:', err);
+      storageDisponible = false;
+      reportes = reportes || [];
+      document.getElementById('list-hint').textContent = 'Modo sesión (no persiste al recargar)';
+    }
+    renderList();
+    renderMarkers();
+  }
+
+  async function saveReportes(){
+    if(!storageDisponible){
+      return; // se guarda solo en memoria, no hay backend disponible en esta vista
+    }
+    try{
+      await window.storage.set(STORAGE_KEY, JSON.stringify(reportes), true);
+    }catch(err){
+      console.warn('No se pudo guardar en almacenamiento persistente, se sigue en memoria:', err);
+      storageDisponible = false;
+      document.getElementById('list-hint').textContent = 'Modo sesión (no persiste al recargar)';
+    }
+  }
+
+  document.getElementById('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('form-msg');
+    msg.className = 'msg'; msg.textContent = '';
+
+    const localidad = document.getElementById('localidad').value;
+    const barrio = document.getElementById('barrio').value.trim();
+    const calle = document.getElementById('calle').value.trim();
+    if(!localidad || !barrio){
+      msg.className = 'msg err';
+      msg.textContent = 'Completá al menos localidad y barrio.';
+      return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Ubicando en el mapa…';
+
+    const ubicacion = ubicarDireccion(calle, barrio, localidad);
+
+    const nuevo = {
+      id: 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
+      lat: ubicacion.lat,
+      lng: ubicacion.lng,
+      aproximado: ubicacion.aproximado,
+      localidad,
+      barrio,
+      calle,
+      descripcion: document.getElementById('descripcion').value.trim(),
+      foto: photoDataUrl,
+      fecha: new Date().toISOString()
+    };
+
+    try{
+      reportes.push(nuevo);
+      await saveReportes();
+      renderList();
+      renderMarkers();
+      map.setView([nuevo.lat, nuevo.lng], 16, {animate:true});
+      markerLayer.eachLayer(m => {
+        if(m.getLatLng().lat === nuevo.lat && m.getLatLng().lng === nuevo.lng){ m.openPopup(); }
+      });
+
+      msg.className = 'msg ok';
+      msg.textContent = ubicacion.aproximado
+        ? '¡Gracias! Tu reporte ya está en el mapa, ubicado de forma aproximada en el barrio ' + barrio + '.'
+        : '¡Gracias! Tu reporte ya está en el mapa.';
+
+      document.getElementById('form').reset();
+      document.getElementById('foto-preview').style.display = 'none';
+      photoDataUrl = null;
+    }catch(err){
+      console.error(err);
+      reportes.pop();
+      msg.className = 'msg err';
+      msg.textContent = 'No se pudo guardar. Intentá de nuevo.';
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Reportar bache';
+    }
+  });
+
+  loadReportes();
+})();
+</script>
+</body>
+</html>
