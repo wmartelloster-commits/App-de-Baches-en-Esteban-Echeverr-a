@@ -320,17 +320,9 @@
     '9 de Abril': [-34.8517, -58.4658]
   };
 
-  function jitter(coord){
-    // pequeño desplazamiento aleatorio para que reportes aproximados
-    // en una misma localidad no queden todos apilados en el mismo punto
-    const delta = () => (Math.random() - 0.5) * 0.006;
-    return [coord[0] + delta(), coord[1] + delta()];
-  }
-
   function jitter(coord, seedStr){
     // desplazamiento pseudo-aleatorio pero determinístico según barrio+calle,
-    // para que el mismo barrio/calle siempre caiga cerca del mismo punto
-    // y no todos los reportes de una localidad queden apilados en un solo lugar
+    // usado SOLO como respaldo si la búsqueda de la dirección real falla
     let hash = 0;
     for(let i=0;i<seedStr.length;i++){ hash = (hash*31 + seedStr.charCodeAt(i)) | 0; }
     const rnd1 = Math.abs(Math.sin(hash)) - 0.5;
@@ -338,10 +330,32 @@
     return [coord[0] + rnd1*0.012, coord[1] + rnd2*0.012];
   }
 
-  function ubicarDireccion(calle, barrio, localidad){
+  function ubicacionAproximada(calle, barrio, localidad){
     const centro = LOCALIDAD_CENTROS[localidad] || CENTER;
     const [lat, lng] = jitter(centro, (localidad||'') + '|' + (barrio||'') + '|' + (calle||''));
     return { lat, lng, aproximado: true };
+  }
+
+  async function ubicarDireccion(calle, barrio, localidad){
+    // Busca la dirección real con Nominatim (OpenStreetMap). Si no hay
+    // calle cargada, o la búsqueda falla, usa el respaldo aproximado.
+    if(!calle){
+      return ubicacionAproximada(calle, barrio, localidad);
+    }
+    const consulta = [calle, barrio, localidad, 'Partido de Esteban Echeverría', 'Buenos Aires', 'Argentina']
+      .filter(Boolean).join(', ');
+    try{
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ar&q=' + encodeURIComponent(consulta);
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      if(!res.ok) throw new Error('respuesta no válida del servicio de mapas');
+      const data = await res.json();
+      if(data && data[0]){
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), aproximado: false };
+      }
+    }catch(err){
+      console.warn('No se pudo encontrar la dirección exacta, se usa ubicación aproximada:', err);
+    }
+    return ubicacionAproximada(calle, barrio, localidad);
   }
 
   const map = L.map('map').setView(CENTER, 12);
@@ -502,7 +516,7 @@
     btn.disabled = true;
     btn.textContent = 'Ubicando en el mapa…';
 
-    const ubicacion = ubicarDireccion(calle, barrio, localidad);
+    const ubicacion = await ubicarDireccion(calle, barrio, localidad);
 
     const nuevo = {
       id: 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
