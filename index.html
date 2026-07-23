@@ -336,25 +336,43 @@
     return { lat, lng, aproximado: true };
   }
 
+  async function buscarEnNominatim(params){
+    try{
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&' + params;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+      if(!res.ok) return null;
+      const data = await res.json();
+      if(data && data[0]){
+        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+      }
+    }catch(err){
+      console.warn('Fallo la consulta a Nominatim:', err);
+    }
+    return null;
+  }
+
   async function ubicarDireccion(calle, barrio, localidad){
-    // Busca la dirección real con Nominatim (OpenStreetMap). Si no hay
-    // calle cargada, o la búsqueda falla, usa el respaldo aproximado.
     if(!calle){
       return ubicacionAproximada(calle, barrio, localidad);
     }
-    const consulta = [calle, barrio, localidad, 'Partido de Esteban Echeverría', 'Buenos Aires', 'Argentina']
-      .filter(Boolean).join(', ');
-    try{
-      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ar&q=' + encodeURIComponent(consulta);
-      const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-      if(!res.ok) throw new Error('respuesta no válida del servicio de mapas');
-      const data = await res.json();
-      if(data && data[0]){
-        return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), aproximado: false };
-      }
-    }catch(err){
-      console.warn('No se pudo encontrar la dirección exacta, se usa ubicación aproximada:', err);
-    }
+
+    // 1) Búsqueda ESTRUCTURADA (mucho más precisa que el texto libre):
+    // separa calle, ciudad y provincia en vez de mezclar todo en una frase.
+    const paramsEstructurados = 'street=' + encodeURIComponent(calle) +
+      '&city=' + encodeURIComponent(localidad) +
+      '&state=' + encodeURIComponent('Buenos Aires') +
+      '&country=' + encodeURIComponent('Argentina') +
+      '&countrycodes=ar';
+    let resultado = await buscarEnNominatim(paramsEstructurados);
+    if(resultado) return { ...resultado, aproximado: false };
+
+    // 2) Si no encontró nada, texto libre simple (sin barrio ni "Partido de..."
+    // que no son nombres oficiales y pueden confundir la búsqueda)
+    const consultaSimple = [calle, localidad, 'Buenos Aires', 'Argentina'].filter(Boolean).join(', ');
+    resultado = await buscarEnNominatim('countrycodes=ar&q=' + encodeURIComponent(consultaSimple));
+    if(resultado) return { ...resultado, aproximado: false };
+
+    // 3) Respaldo aproximado si ninguna búsqueda encontró la dirección
     return ubicacionAproximada(calle, barrio, localidad);
   }
 
